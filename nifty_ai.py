@@ -171,3 +171,44 @@ if signal in ["CALL", "PUT"] and confidence >= 70:
         st.warning("No strike found in ₹80–₹200 range. No trade today.")
 else:
     st.warning("Confidence too low or no signal. No trade today.")
+# --- Streamlit UI ---
+st.title("📈 Nifty AI Trading Assistant")
+st.write("Capital: ₹10,000 | Target Profit: ₹3,000 | Premium Range: ₹80–₹200")
+
+mode = st.radio("Select Mode:", ["Live Trade Plan", "Backtest CALL", "Backtest PUT"])
+
+spot, dow, nasdaq, nikkei = fetch_indices()
+gift = None  # Placeholder until Gift Nifty API is added
+
+if spot is None:
+    st.error("⚠️ Nifty Spot data not available. NSE API and Yahoo Finance both failed.")
+    st.stop()
+
+nifty = yf.download("^NSEI", period="1mo", interval="15m")
+
+signal = check_signal(nifty) if mode == "Live Trade Plan" else ("CALL" if mode == "Backtest CALL" else "PUT")
+confidence = calculate_confidence(signal, spot, gift, dow, nasdaq, nikkei)
+
+st.write(f"**Nifty Spot:** {spot}")
+st.write(f"**Dow:** {dow}, **Nasdaq:** {nasdaq}, **Nikkei:** {nikkei}")
+st.write(f"**Technical Signal:** {signal}")
+st.write(f"**Confidence Score:** {confidence}%")
+
+# --- Option Chain Fetch ---
+chain = fetch_option_chain()
+records = chain['records']['data']
+
+# --- User Strike Selection ---
+available_strikes = sorted(set([item['strikePrice'] for item in records]))
+selected_strike = st.selectbox("Select Strike Price:", available_strikes)
+
+if selected_strike:
+    strike_data = next((item for item in records if item['strikePrice'] == selected_strike), None)
+    if strike_data:
+        premium = strike_data['CE']['lastPrice'] if signal == "CALL" else strike_data['PE']['lastPrice']
+        st.write(f"**Selected Strike:** {selected_strike}")
+        st.write(f"**Current Premium:** ₹{premium}")
+        st.write(f"**Cost to Buy (Lot Size 50):** ₹{premium * 50}")
+
+        # Show payoff diagram
+        payoff_diagram(signal, selected_strike, premium, spot)
