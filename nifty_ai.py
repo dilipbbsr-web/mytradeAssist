@@ -17,7 +17,6 @@ def fetch_nifty_spot():
     }
     session = requests.Session()
     try:
-        # preload cookies
         session.get("https://www.nseindia.com", headers=headers)
         response = session.get(url, headers=headers)
         data = response.json()
@@ -26,7 +25,7 @@ def fetch_nifty_spot():
     except Exception:
         pass
 
-    # Fallback to Yahoo Finance if NSE fails
+    # Fallback to Yahoo Finance
     try:
         df = yf.download("^NSEI", period="1d", interval="1d")
         if not df.empty:
@@ -105,18 +104,6 @@ def fetch_option_chain(symbol="NIFTY"):
     data = session.get(url, headers=headers).json()
     return data
 
-# --- Strike Selection ---
-def select_strike(records, signal, spot):
-    atm_strike = round(spot / 50) * 50
-    candidate_strikes = [atm_strike-100, atm_strike-50, atm_strike, atm_strike+50, atm_strike+100, atm_strike+150]
-    for strike in candidate_strikes:
-        atm_data = next((item for item in records if item['strikePrice'] == strike), None)
-        if atm_data:
-            premium = atm_data['CE']['lastPrice'] if signal == "CALL" else atm_data['PE']['lastPrice']
-            if 80 <= premium <= 200:
-                return strike, premium
-    return None, None
-
 # --- Payoff Diagram ---
 def payoff_diagram(signal, strike, premium, spot, lot_size=50):
     prices = np.arange(spot-300, spot+300, 50)
@@ -139,43 +126,11 @@ def payoff_diagram(signal, strike, premium, spot, lot_size=50):
 st.title("📈 Nifty AI Trading Assistant")
 st.write("Capital: ₹10,000 | Target Profit: ₹3,000 | Premium Range: ₹80–₹200")
 
-mode = st.radio("Select Mode:", ["Live Trade Plan", "Backtest CALL", "Backtest PUT"])
-
-spot, dow, nasdaq, nikkei = fetch_indices()
-gift = None  # Placeholder until Gift Nifty API is added
-
-if spot is None:
-    st.error("⚠️ Nifty Spot data not available. NSE API and Yahoo Finance both failed.")
-    st.stop()
-
-nifty = yf.download("^NSEI", period="1mo", interval="15m")
-
-signal = check_signal(nifty) if mode == "Live Trade Plan" else ("CALL" if mode == "Backtest CALL" else "PUT")
-confidence = calculate_confidence(signal, spot, gift, dow, nasdaq, nikkei)
-
-st.write(f"**Nifty Spot:** {spot}")
-st.write(f"**Dow:** {dow}, **Nasdaq:** {nasdaq}, **Nikkei:** {nikkei}")
-st.write(f"**Technical Signal:** {signal}")
-st.write(f"**Confidence Score:** {confidence}%")
-
-if signal in ["CALL", "PUT"] and confidence >= 70:
-    chain = fetch_option_chain()
-    records = chain['records']['data']
-    strike, premium = select_strike(records, signal, spot)
-    if strike and premium:
-        st.success(f"Suggested Trade: Buy {signal} at {strike} strike")
-        st.write(f"Entry Premium: ₹{premium}")
-        st.write("Target Profit: ₹3000 | Stop-Loss: ₹1500")
-        payoff_diagram(signal, strike, premium, spot)
-    else:
-        st.warning("No strike found in ₹80–₹200 range. No trade today.")
-else:
-    st.warning("Confidence too low or no signal. No trade today.")
-# --- Streamlit UI ---
-st.title("📈 Nifty AI Trading Assistant")
-st.write("Capital: ₹10,000 | Target Profit: ₹3,000 | Premium Range: ₹80–₹200")
-
-mode = st.radio("Select Mode:", ["Live Trade Plan", "Backtest CALL", "Backtest PUT"])
+mode = st.radio(
+    "Select Mode:",
+    ["Live Trade Plan", "Backtest CALL", "Backtest PUT"],
+    key="mode_selector"
+)
 
 spot, dow, nasdaq, nikkei = fetch_indices()
 gift = None  # Placeholder until Gift Nifty API is added
@@ -200,7 +155,11 @@ records = chain['records']['data']
 
 # --- User Strike Selection ---
 available_strikes = sorted(set([item['strikePrice'] for item in records]))
-selected_strike = st.selectbox("Select Strike Price:", available_strikes)
+selected_strike = st.selectbox(
+    "Select Strike Price:",
+    available_strikes,
+    key="strike_selector"
+)
 
 if selected_strike:
     strike_data = next((item for item in records if item['strikePrice'] == selected_strike), None)
@@ -209,6 +168,4 @@ if selected_strike:
         st.write(f"**Selected Strike:** {selected_strike}")
         st.write(f"**Current Premium:** ₹{premium}")
         st.write(f"**Cost to Buy (Lot Size 50):** ₹{premium * 50}")
-
-        # Show payoff diagram
         payoff_diagram(signal, selected_strike, premium, spot)
