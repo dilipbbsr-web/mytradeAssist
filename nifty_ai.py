@@ -7,11 +7,13 @@ import matplotlib.pyplot as plt
 
 # Step 1: Fetch Spot & Global Indices
 def fetch_indices():
-    spot = yf.download("^NSEI", period="5d", interval="15m")['Close'].iloc[-1].item()
-    dow = yf.download("^DJI", period="1d", interval="1d")['Close'].iloc[-1].item()
-    nasdaq = yf.download("^IXIC", period="1d", interval="1d")['Close'].iloc[-1].item()
-    nikkei = yf.download("^N225", period="1d", interval="1d")['Close'].iloc[-1].item()
+    spot = fetch_nifty_spot()
+    # Keep global indices with yfinance (Dow, Nasdaq, Nikkei)
+    dow = safe_download("^DJI")
+    nasdaq = safe_download("^IXIC")
+    nikkei = safe_download("^N225")
     return spot, dow, nasdaq, nikkei
+
 
 # Step 2: Scrape Gift Nifty from Angel One
 def fetch_gift_nifty():
@@ -26,6 +28,22 @@ def fetch_gift_nifty():
         return float(price_tag.text.replace(",", "").strip())
     else:
         return None
+
+def safe_download(symbol, period="1d", interval="1d"):
+    try:
+        df = yf.download(symbol, period=period, interval=interval)
+        if not df.empty:
+            return df['Close'].iloc[-1].item()
+        else:
+            return None
+    except Exception:
+        return None
+spot, dow, nasdaq, nikkei = fetch_indices()
+
+if spot is None:
+    st.error("Nifty Spot data not available. Please try again later.")
+    st.stop()
+
 
 # Step 3: Technical Indicators
 def compute_rsi(series, period=14):
