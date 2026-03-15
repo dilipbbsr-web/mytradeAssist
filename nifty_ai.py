@@ -91,7 +91,7 @@ def calculate_confidence(signal, spot, gift, dow, nasdaq, nikkei):
         score += 40
     return score
 
-# --- Option Chain ---
+# --- Option Chain (Safe) ---
 def fetch_option_chain(symbol="NIFTY"):
     url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
     headers = {
@@ -101,8 +101,14 @@ def fetch_option_chain(symbol="NIFTY"):
     }
     session = requests.Session()
     session.get("https://www.nseindia.com", headers=headers)
-    data = session.get(url, headers=headers).json()
-    return data
+    try:
+        data = session.get(url, headers=headers).json()
+        if "records" in data and "data" in data["records"]:
+            return data["records"]["data"]
+        else:
+            return []
+    except Exception:
+        return []
 
 # --- Payoff Diagram ---
 def payoff_diagram(signal, strike, premium, spot, lot_size=50):
@@ -150,8 +156,10 @@ st.write(f"**Technical Signal:** {signal}")
 st.write(f"**Confidence Score:** {confidence}%")
 
 # --- Option Chain Fetch ---
-chain = fetch_option_chain()
-records = chain['records']['data']
+records = fetch_option_chain()
+if not records:
+    st.error("⚠️ Option chain data not available. NSE API returned no values.")
+    st.stop()
 
 # --- User Strike Selection ---
 available_strikes = sorted(set([item['strikePrice'] for item in records]))
