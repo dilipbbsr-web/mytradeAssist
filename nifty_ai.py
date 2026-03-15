@@ -121,6 +121,38 @@ nifty = yf.download("^NSEI", period="1mo", interval="15m")
 signal = check_signal(nifty) if mode == "Live Trade Plan" else ("CALL" if mode == "Backtest CALL" else "PUT")
 confidence = calculate_confidence(signal, spot, gift, dow, nasdaq, nikkei)
 
+headers = {
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/json",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.nseindia.com/"
+}
+
+session = requests.Session()
+session.get("https://www.nseindia.com", headers=headers)  # preload cookies
+
+def fetch_nifty_spot():
+    url = "https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY"
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.nseindia.com/"
+    }
+    session = requests.Session()
+    session.get("https://www.nseindia.com", headers=headers)  # preload cookies
+    data = session.get(url, headers=headers).json()
+    if "records" in data and "underlyingValue" in data["records"]:
+        return data["records"]["underlyingValue"]
+    else:
+        return None
+
+spot = fetch_nifty_spot()
+if spot is None:
+    st.error("Nifty Spot data not available. NSE API returned no value.")
+    st.stop()
+
+
 st.write(f"**Nifty Spot:** {spot}")
 st.write(f"**Dow:** {dow}, **Nasdaq:** {nasdaq}, **Nikkei:** {nikkei}")
 st.write(f"**Technical Signal:** {signal}")
