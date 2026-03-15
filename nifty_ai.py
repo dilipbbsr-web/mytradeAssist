@@ -8,11 +8,26 @@ import matplotlib.pyplot as plt
 # --- Fetch Nifty Spot from NSE India API ---
 def fetch_nifty_spot():
     url = "https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY"
-    headers = {"User-Agent": "Mozilla/5.0"}
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Accept": "application/json",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.nseindia.com/"
+    }
     session = requests.Session()
-    data = session.get(url, headers=headers).json()
-    spot = data['records']['underlyingValue']
-    return spot
+    # preload cookies
+    session.get("https://www.nseindia.com", headers=headers)
+    response = session.get(url, headers=headers)
+    try:
+        data = response.json()
+    except Exception:
+        return None
+
+    # Defensive check
+    if "records" in data and "underlyingValue" in data["records"]:
+        return data["records"]["underlyingValue"]
+    else:
+        return None
 
 # --- Safe Yahoo Finance Download ---
 def safe_download(symbol, period="1d", interval="1d"):
@@ -59,12 +74,12 @@ def check_signal(df):
 def calculate_confidence(signal, spot, gift, dow, nasdaq, nikkei):
     score = 0
     if signal == "CALL":
-        if gift and gift > spot: score += 25
+        if gift and spot and gift > spot: score += 25
         if dow and nasdaq and dow > 0 and nasdaq > 0: score += 15
         if nikkei and nikkei > 0: score += 10
         score += 40
     elif signal == "PUT":
-        if gift and gift < spot: score += 25
+        if gift and spot and gift < spot: score += 25
         if dow and nasdaq and dow < 0 and nasdaq < 0: score += 15
         if nikkei and nikkei < 0: score += 10
         score += 40
@@ -73,8 +88,13 @@ def calculate_confidence(signal, spot, gift, dow, nasdaq, nikkei):
 # --- Option Chain ---
 def fetch_option_chain(symbol="NIFTY"):
     url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
-    headers = {"User-Agent": "Mozilla/5.0"}
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json",
+        "Referer": "https://www.nseindia.com/"
+    }
     session = requests.Session()
+    session.get("https://www.nseindia.com", headers=headers)
     data = session.get(url, headers=headers).json()
     return data
 
@@ -115,43 +135,16 @@ st.write("Capital: ₹10,000 | Target Profit: ₹3,000 | Premium Range: ₹80–
 mode = st.radio("Select Mode:", ["Live Trade Plan", "Backtest CALL", "Backtest PUT"])
 
 spot, dow, nasdaq, nikkei = fetch_indices()
-gift = None  # Placeholder until Angel One API is added
+gift = None  # Placeholder until Gift Nifty API is added
+
+if spot is None:
+    st.error("⚠️ Nifty Spot data not available. NSE API returned no value.")
+    st.stop()
+
 nifty = yf.download("^NSEI", period="1mo", interval="15m")
 
 signal = check_signal(nifty) if mode == "Live Trade Plan" else ("CALL" if mode == "Backtest CALL" else "PUT")
 confidence = calculate_confidence(signal, spot, gift, dow, nasdaq, nikkei)
-
-headers = {
-    "User-Agent": "Mozilla/5.0",
-    "Accept": "application/json",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Referer": "https://www.nseindia.com/"
-}
-
-session = requests.Session()
-session.get("https://www.nseindia.com", headers=headers)  # preload cookies
-
-def fetch_nifty_spot():
-    url = "https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY"
-    headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://www.nseindia.com/"
-    }
-    session = requests.Session()
-    session.get("https://www.nseindia.com", headers=headers)  # preload cookies
-    data = session.get(url, headers=headers).json()
-    if "records" in data and "underlyingValue" in data["records"]:
-        return data["records"]["underlyingValue"]
-    else:
-        return None
-
-spot = fetch_nifty_spot()
-if spot is None:
-    st.error("Nifty Spot data not available. NSE API returned no value.")
-    st.stop()
-
 
 st.write(f"**Nifty Spot:** {spot}")
 st.write(f"**Dow:** {dow}, **Nasdaq:** {nasdaq}, **Nikkei:** {nikkei}")
