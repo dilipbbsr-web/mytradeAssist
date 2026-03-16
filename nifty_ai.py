@@ -11,9 +11,7 @@ def fetch_nifty_spot():
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "Accept": "application/json",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://www.nseindia.com/",
-        "Connection": "keep-alive"
+        "Referer": "https://www.nseindia.com/"
     }
     session = requests.Session()
     try:
@@ -91,22 +89,39 @@ def calculate_confidence(signal, spot, gift, dow, nasdaq, nikkei):
         score += 40
     return score
 
-# --- Option Chain (Safe) ---
-def fetch_option_chain(symbol="NIFTY"):
-    url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
+# --- Option Chain (Safe with Fallback) ---
+def fetch_option_chain(symbol="^NSEI"):
+    # Try NSE API first
+    url = "https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY"
     headers = {
         "User-Agent": "Mozilla/5.0",
         "Accept": "application/json",
         "Referer": "https://www.nseindia.com/"
     }
     session = requests.Session()
-    session.get("https://www.nseindia.com", headers=headers)
     try:
+        session.get("https://www.nseindia.com", headers=headers)
         data = session.get(url, headers=headers).json()
         if "records" in data and "data" in data["records"]:
             return data["records"]["data"]
-        else:
-            return []
+    except Exception:
+        pass
+
+    # Fallback to Yahoo Finance option chain
+    try:
+        ticker = yf.Ticker(symbol)
+        expiry = ticker.options[0]  # nearest expiry
+        chain = ticker.option_chain(expiry)
+        records = []
+        for _, row in chain.calls.iterrows():
+            records.append({"strikePrice": row['strike'], "CE": {"lastPrice": row['lastPrice']}})
+        for _, row in chain.puts.iterrows():
+            match = next((r for r in records if r['strikePrice'] == row['strike']), None)
+            if match:
+                match["PE"] = {"lastPrice": row['lastPrice']}
+            else:
+                records.append({"strikePrice": row['strike'], "PE": {"lastPrice": row['lastPrice']}})
+        return records
     except Exception:
         return []
 
@@ -158,7 +173,7 @@ st.write(f"**Confidence Score:** {confidence}%")
 # --- Option Chain Fetch ---
 records = fetch_option_chain()
 if not records:
-    st.error("⚠️ Option chain data not available. NSE API returned no values.")
+    st.error("⚠️ Option chain data not available from NSE or Yahoo Finance.")
     st.stop()
 
 # --- Premium Filter (₹80–₹200) ---
