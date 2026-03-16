@@ -161,19 +161,30 @@ if not records:
     st.error("⚠️ Option chain data not available. NSE API returned no values.")
     st.stop()
 
-# --- User Strike Selection ---
-available_strikes = sorted(set([item['strikePrice'] for item in records]))
-selected_strike = st.selectbox(
-    "Select Strike Price:",
-    available_strikes,
-    key="strike_selector"
-)
+# --- Premium Filter (₹80–₹200) ---
+filtered_strikes = []
+for item in records:
+    try:
+        premium = item['CE']['lastPrice'] if signal == "CALL" else item['PE']['lastPrice']
+        if 80 <= premium <= 200:
+            filtered_strikes.append(item['strikePrice'])
+    except Exception:
+        continue
 
-if selected_strike:
-    strike_data = next((item for item in records if item['strikePrice'] == selected_strike), None)
-    if strike_data:
-        premium = strike_data['CE']['lastPrice'] if signal == "CALL" else strike_data['PE']['lastPrice']
-        st.write(f"**Selected Strike:** {selected_strike}")
-        st.write(f"**Current Premium:** ₹{premium}")
-        st.write(f"**Cost to Buy (Lot Size 50):** ₹{premium * 50}")
-        payoff_diagram(signal, selected_strike, premium, spot)
+if not filtered_strikes:
+    st.warning("No strikes found in ₹80–₹200 premium range.")
+else:
+    selected_strike = st.selectbox(
+        "Select Strike Price (Premium ₹80–₹200):",
+        sorted(set(filtered_strikes)),
+        key="strike_selector"
+    )
+
+    if selected_strike:
+        strike_data = next((item for item in records if item['strikePrice'] == selected_strike), None)
+        if strike_data:
+            premium = strike_data['CE']['lastPrice'] if signal == "CALL" else strike_data['PE']['lastPrice']
+            st.write(f"**Selected Strike:** {selected_strike}")
+            st.write(f"**Current Premium:** ₹{premium}")
+            st.write(f"**Cost to Buy (Lot Size 50):** ₹{premium * 50}")
+            payoff_diagram(signal, selected_strike, premium, spot)
