@@ -89,8 +89,8 @@ def calculate_confidence(signal, spot, gift, dow, nasdaq, nikkei):
         score += 40
     return score
 
-# --- Option Chain (Safe with Fallback) ---
-def fetch_option_chain(symbol="^NSEI"):
+# --- Option Chain (Safe with Fallback to NIFTY.NS) ---
+def fetch_option_chain(symbol="NIFTY.NS"):
     # Try NSE API first
     url = "https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY"
     headers = {
@@ -173,7 +173,7 @@ st.write(f"**Confidence Score:** {confidence}%")
 # --- Option Chain Fetch ---
 records = fetch_option_chain()
 if not records:
-    st.error("⚠️ Option chain data not available from NSE or Yahoo Finance.")
+    st.error("⚠️ Option chain data not available from NSE or Yahoo Finance (NIFTY.NS).")
     st.stop()
 
 # --- Premium Filter (₹80–₹200) ---
